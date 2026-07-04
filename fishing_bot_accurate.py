@@ -35,6 +35,8 @@ keyboard.on_press_key('f', on_key_pressed)
 
 NAMETAG_TEMPLATE_FILE = "nametag_template.png"
 EXCLAMATION_TEMPLATE_FILE = "exclamation_template.png"
+REPAIR_TEMPLATE_FILE = "repair_template.png"
+STORE_TEMPLATE_FILE = "store_template.png"
 
 # Tham số nhận diện nametag (tên người chơi)
 NAMETAG_THRESHOLD = 0.60
@@ -103,7 +105,7 @@ class Overlay:
         if nametag_box:
             x, y, w, h = nametag_box
             color = "#FF9900" if estimated else "#00FF00"
-            label = f"ngducvii ({'Est' if estimated else 'Lock'}: {name_score:.2f})"
+            label = f"Target ({'Est' if estimated else 'Lock'}: {name_score:.2f})"
             self.canvas.create_rectangle(x, y, x+w, y+h, outline=color, width=2)
             self.canvas.create_text(x, y-10, text=label, fill=color, anchor="w")
         if scan_box:
@@ -165,16 +167,135 @@ def find_nametag_center_bias(img_gray, tmpl_gray, scales):
             best_score, best_loc, best_scale = adjusted, loc, s
     return best_score, best_loc, best_scale
 
+is_paused = False
+
+def check_pause(overlay):
+    global is_paused
+    if keyboard.is_pressed('p'):
+        is_paused = not is_paused
+        if is_paused:
+            print("\n[!] Đã TẠM DỪNG bot. Bấm P để tiếp tục...")
+        else:
+            print("\n[+] Đã TIẾP TỤC bot...")
+        time.sleep(0.3)
+        
+    pause_dur = 0.0
+    if is_paused:
+        t0 = time.time()
+        while is_paused:
+            overlay.update()
+            if keyboard.is_pressed('q') or keyboard.is_pressed('r') or keyboard.is_pressed('e'):
+                break
+            if keyboard.is_pressed('p'):
+                is_paused = False
+                print("\n[+] Đã TIẾP TỤC bot...")
+                time.sleep(0.3)
+            time.sleep(0.02)
+        pause_dur = time.time() - t0
+    return pause_dur
+
 def sleep_ui(seconds, overlay):
     end = time.time() + seconds
     while time.time() < end:
         overlay.update()
-        if keyboard.is_pressed('q'):
-            return 'q'
-        if keyboard.is_pressed('r'):
-            return 'r'
+        if keyboard.is_pressed('q'): return 'q'
+        if keyboard.is_pressed('r'): return 'r'
+        if keyboard.is_pressed('e'): return 'e'
+        end += check_pause(overlay)
         time.sleep(0.02)
     return None
+def scan_template_routine(win_title, output_file, success_msg):
+    import mss
+    import cv2
+    import numpy as np
+    import time
+    from tkinter import messagebox
+    
+    time.sleep(0.5)
+    sct = mss.mss()
+    monitor = sct.monitors[1]
+    sct_img = sct.grab(monitor)
+    img = np.array(sct_img)
+    img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+    
+    cv2.namedWindow(win_title, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(win_title, cv2.WND_PROP_TOPMOST, 1)
+    
+    roi = cv2.selectROI(win_title, img_bgr, fromCenter=False, showCrosshair=True)
+    cv2.destroyWindow(win_title)
+    for _ in range(10):
+        cv2.waitKey(1)
+    
+    if roi[2] > 0 and roi[3] > 0:
+        rx, ry, rw, rh = roi
+        tmpl = img_bgr[ry:ry+rh, rx:rx+rw]
+        cv2.imwrite(output_file, tmpl)
+        messagebox.showinfo("Thanh cong", success_msg)
+
+def show_control_panel(parent=None):
+    if parent:
+        panel = tk.Toplevel(parent)
+    else:
+        panel = tk.Tk()
+    panel.title("Fishing Bot - Bang Dieu Khien")
+    panel.geometry("400x350")
+    panel.attributes("-topmost", True)
+    
+    w, h = 400, 350
+    sw = panel.winfo_screenwidth()
+    sh = panel.winfo_screenheight()
+    x = (sw - w) // 2
+    y = (sh - h) // 2
+    panel.geometry(f"{w}x{h}+{x}+{y}")
+
+    def on_scan_name():
+        panel.withdraw()
+        scan_template_routine("CHON NAMETAG NHAN VAT", NAMETAG_TEMPLATE_FILE, "Da luu Nametag moi thanh cong!")
+        panel.deiconify()
+
+    def on_scan_repair():
+        panel.withdraw()
+        scan_template_routine("CHON CHU 'THONG TIN SUA CHUA'", REPAIR_TEMPLATE_FILE, "Da luu mau Sửa Cần thanh cong!")
+        panel.deiconify()
+
+    def on_scan_store():
+        panel.withdraw()
+        scan_template_routine("CHON CHU 'BAO QUAN'", STORE_TEMPLATE_FILE, "Da luu mau Bảo Quản thanh cong!")
+        panel.deiconify()
+
+    def on_start():
+        global HARVEST_WAIT
+        import os
+        from tkinter import messagebox
+        try:
+            HARVEST_WAIT = float(harvest_wait_var.get())
+        except ValueError:
+            pass
+        if not os.path.exists(NAMETAG_TEMPLATE_FILE):
+            messagebox.showerror("Loi", "Chua co file nametag_template.png!\nVui long Quet Nametag Moi truoc.")
+            return
+        if not os.path.exists(EXCLAMATION_TEMPLATE_FILE):
+            messagebox.showerror("Loi", "Thieu file exclamation_template.png!\nVui long copy file nay vao cung thu muc voi file exe.")
+            return
+        panel.destroy()
+
+    tk.Label(panel, text="FISHING BOT - PLAY TOGETHER", font=("Arial", 14, "bold")).pack(pady=10)
+    
+    frame_wait = tk.Frame(panel)
+    frame_wait.pack(pady=5)
+    tk.Label(frame_wait, text="Thời gian kéo cá mặc định (giây):", font=("Arial", 10)).pack(side=tk.LEFT)
+    harvest_wait_var = tk.StringVar(value=str(HARVEST_WAIT))
+    tk.Entry(frame_wait, textvariable=harvest_wait_var, font=("Arial", 10), width=5).pack(side=tk.LEFT, padx=5)
+
+    tk.Button(panel, text="1. Quet Nametag Moi", command=on_scan_name, font=("Arial", 11), bg="#FF9900", fg="white").pack(pady=5, fill='x', padx=20)
+    tk.Button(panel, text="2. Quet Giao Dien Sua Can", command=on_scan_repair, font=("Arial", 11), bg="#3399FF", fg="white").pack(pady=5, fill='x', padx=20)
+    tk.Button(panel, text="3. Quet Chu 'Bao Quan' (Tuy Chon)", command=on_scan_store, font=("Arial", 11), bg="#9933FF", fg="white").pack(pady=5, fill='x', padx=20)
+    tk.Button(panel, text="4. Bat Dau Chay Bot", command=on_start, font=("Arial", 12), bg="#00CC00", fg="white").pack(pady=10, fill='x', padx=20)
+    
+    if parent:
+        panel.wait_window()
+    else:
+        panel.mainloop()
 
 def main():
     print("==================================================")
@@ -185,8 +306,10 @@ def main():
     print("  Thay (!) -> Space -> Git can")
     print("  Space -> Cat ca -> lap lai")
     print("--------------------------------------------------")
-    print("Phím: R=Bắt đầu/Restart, Q=Thoát")
+    print("Phím: R=Bắt đầu/Restart, P=Tạm dừng, Q=Thoát, E=Cài đặt")
     print("==================================================")
+
+    show_control_panel()
 
     # Kiểm tra file template
     if not os.path.exists(NAMETAG_TEMPLATE_FILE):
@@ -199,6 +322,10 @@ def main():
     # Load templates
     # Load template nametag và tạo mask xanh lá thay vì dùng ảnh xám
     nametag_tmpl_color = cv2.imread(NAMETAG_TEMPLATE_FILE)
+    if nametag_tmpl_color is None:
+        import tkinter.messagebox
+        tkinter.messagebox.showerror("Loi", f"Khong the doc file {NAMETAG_TEMPLATE_FILE}!")
+        return
     nametag_tmpl_green = cv2.inRange(nametag_tmpl_color, np.array([0, 200, 0]), np.array([50, 255, 50]))
     nt_h, nt_w = nametag_tmpl_green.shape
 
@@ -207,7 +334,6 @@ def main():
     sh = sct.monitors[1]["height"]
 
     overlay = Overlay()
-    keyboard.wait('r')
     print("[+] Bot chạy! Nhấn Q để dừng, R để khởi động lại.")
     sleep_ui(0.5, overlay)
 
@@ -230,10 +356,16 @@ def main():
 
     try:
         while True:
-            if keyboard.is_pressed('q'):
-                break
+            if keyboard.is_pressed('q'): break
             if keyboard.is_pressed('r'):
                 print("[+] Đang khởi động lại...")
+                last_box, known_rx, known_ry = None, None, None
+                sleep_ui(0.5, overlay)
+                continue
+            if keyboard.is_pressed('e'):
+                print("\n[+] Đang mở lại bảng cài đặt...")
+                show_control_panel(overlay.root)
+                print("[+] Đã đóng cài đặt, đang khởi động lại...")
                 last_box, known_rx, known_ry = None, None, None
                 sleep_ui(0.5, overlay)
                 continue
@@ -243,9 +375,40 @@ def main():
             overlay.draw(None, None)
             overlay.update()
             pydirectinput.press('f')
-            res = sleep_ui(CAST_WAIT, overlay)
-            if res == 'q' or keyboard.is_pressed('q'):
-                break
+
+            # Kiểm tra xem có hiện bảng sửa cần không (đợi xíu cho animation popup)
+            res = sleep_ui(0.8, overlay)
+            
+            repair_detected = False
+            if os.path.exists(REPAIR_TEMPLATE_FILE):
+                repair_tmpl = cv2.imread(REPAIR_TEMPLATE_FILE, cv2.IMREAD_GRAYSCALE)
+                if repair_tmpl is not None:
+                    sct_img = sct.grab(sct.monitors[1])
+                    img_gray = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+                    res_match = cv2.matchTemplate(img_gray, repair_tmpl, cv2.TM_CCOEFF_NORMED)
+                    _, max_val, _, _ = cv2.minMaxLoc(res_match)
+                    if max_val > 0.8:
+                        repair_detected = True
+
+            if repair_detected:
+                print("\n[!] Cần bị hỏng! Đang tự động sửa (bấm O)...")
+                pydirectinput.press('o')
+                sleep_ui(1.0, overlay)
+                print("[+] Đã sửa xong, quăng cần lại!")
+                continue
+
+            # Nếu không phải sửa cần, thì chờ nốt phần thời gian còn lại của CAST_WAIT
+            if res not in ['q', 'r']:
+                res = sleep_ui(CAST_WAIT - 0.8, overlay)
+
+            if res == 'q' or keyboard.is_pressed('q'): break
+            if res == 'e' or keyboard.is_pressed('e'):
+                print("\n[+] Đang mở lại bảng cài đặt...")
+                show_control_panel(overlay.root)
+                print("[+] Đã đóng cài đặt, đang khởi động lại...")
+                last_box, known_rx, known_ry = None, None, None
+                sleep_ui(0.5, overlay)
+                continue
             if res == 'r' or keyboard.is_pressed('r'):
                 print("[+] Đang khởi động lại...")
                 last_box, known_rx, known_ry = None, None, None
@@ -261,8 +424,12 @@ def main():
                 if keyboard.is_pressed('q'):
                     break
                 if keyboard.is_pressed('r'):
-                    restart_flag = True
+                    restart_flag = 'r'
                     break
+                if keyboard.is_pressed('e'):
+                    restart_flag = 'e'
+                    break
+                lock_deadline += check_pause(overlay)
 
                 rect = wintypes.RECT()
                 GetWindowRect(hwnd, ctypes.byref(rect))
@@ -307,9 +474,15 @@ def main():
                 time.sleep(0.05)
 
             print()  # xuống dòng sau lock-on
-            if keyboard.is_pressed('q'):
-                break
-            if restart_flag or keyboard.is_pressed('r'):
+            if keyboard.is_pressed('q'): break
+            if restart_flag == 'e' or keyboard.is_pressed('e'):
+                print("\n[+] Đang mở lại bảng cài đặt...")
+                show_control_panel(overlay.root)
+                print("[+] Đã đóng cài đặt, đang khởi động lại...")
+                last_box, known_rx, known_ry = None, None, None
+                sleep_ui(0.5, overlay)
+                continue
+            if restart_flag == 'r' or keyboard.is_pressed('r'):
                 print("[+] Đang khởi động lại...")
                 last_box, known_rx, known_ry = None, None, None
                 sleep_ui(0.5, overlay)
@@ -330,8 +503,16 @@ def main():
                 if keyboard.is_pressed('q'):
                     break
                 if keyboard.is_pressed('r'):
-                    restart_flag = True
+                    restart_flag = 'r'
                     break
+                if keyboard.is_pressed('e'):
+                    restart_flag = 'e'
+                    break
+                
+                pdur = check_pause(overlay)
+                t_start += pdur
+                if fixed_scan_box_time > 0:
+                    fixed_scan_box_time += pdur
 
                 # Lấy vị trí cửa sổ game (để tính offset khi tên bị ẩn)
                 rect = wintypes.RECT()
@@ -448,42 +629,37 @@ def main():
                         g = roi_color[:, :, 1].astype(np.int16)
                         r = roi_color[:, :, 2].astype(np.int16)
                         
-                        mask_p_b = b > 200
-                        mask_p_r = r > 150
-                        mask_p_rg = (r - g) > 20
-                        mask_p_bg = (b - g) > 20
-                        pink_mask = (mask_p_b & mask_p_r & mask_p_rg & mask_p_bg).astype(np.uint8)
+                        # 1. Quét màu hồng (Pink) - Đã mở rộng dải màu từ nhạt đến đậm
+                        # Màu hồng: Red là màu chủ đạo (hoặc tương đương Blue), cao hơn Green.
+                        mask_p_r = r > 100
+                        mask_p_rg = (r - g) > 8
+                        mask_p_bg = (b - g) > -25
+                        pink_mask = (mask_p_r & mask_p_rg & mask_p_bg).astype(np.uint8)
                         
-                        # 2. Quét màu VÀNG đặc trưng của dấu chấm than bằng logic tương đối
-                        # Vàng: Red cao, Green cao, Blue thấp
-                        mask_y_r = r > 200
-                        mask_y_g = g > 150
-                        mask_y_rb = (r - b) > 20
-                        mask_y_gb = (g - b) > 20
+                        # 2. Quét màu VÀNG (Yellow) từ nhạt đến đậm
+                        mask_y_r = r > 120
+                        mask_y_g = g > 120
+                        mask_y_rb = (r - b) > 15
+                        mask_y_gb = (g - b) > 15
                         yellow_mask = (mask_y_r & mask_y_g & mask_y_rb & mask_y_gb).astype(np.uint8)
-                        # Điều kiện chấm than TRẮNG
-                        mask_w = (r > 190) & (g > 190) & (b > 190)
-                        white_mask = mask_w.astype(np.uint8)
+
+                        # Loại bỏ các màu trắng/cam/xanh lá vì dễ gây nhiễu với bọt nước và nền trời/nước
                         
-                        # Điều kiện chấm than CAM (Orange)
-                        mask_o_r = r > 180
-                        mask_o_g = g > 80
-                        mask_o_rg = (r - g) > 40
-                        mask_o_rb = (r - b) > 40
-                        mask_o_gb = (g - b) > 10
-                        orange_mask = (mask_o_r & mask_o_g & mask_o_rg & mask_o_rb & mask_o_gb).astype(np.uint8)
-                        
-                        # Tổng hợp cả 4 loại chấm than
-                        final_mask = pink_mask | yellow_mask | white_mask | orange_mask
+                        # Tổng hợp các loại chấm than (Chỉ dùng Hồng tím và Vàng để chống nhiễu nước)
+                        final_mask = pink_mask | yellow_mask
                         excl_pixels = cv2.countNonZero(final_mask)
                         
+                        # Cập nhật baseline (mức nhiễu nền tĩnh) bằng giá trị lớn nhất trong 1.5s đầu
+                        if time.time() - fixed_scan_box_time <= 1.5:
+                            if baseline_excl_pixels == -1 or excl_pixels > baseline_excl_pixels:
+                                baseline_excl_pixels = excl_pixels
+                                
                         # Chỉ bắt đầu ghi nhận thay đổi nếu khung đã xuất hiện được 1.5 giây
                         # VÀ PHẢI CÁCH LẦN BẤM SPACE/F GẦN NHẤT ÍT NHẤT 2.5 GIÂY!
-                        if time.time() - fixed_scan_box_time > 1.5 and time.time() - last_action_time > 2.5:
-                            # Lấy mẫu nền tĩnh (baseline) để loại trừ cần câu màu hồng/vàng
+                        elif time.time() - fixed_scan_box_time > 1.5 and time.time() - last_action_time > 2.5:
                             if baseline_excl_pixels == -1:
                                 baseline_excl_pixels = excl_pixels
-                                print(f"[*] Đã lấy mẫu nền màu hồng/vàng tĩnh: {baseline_excl_pixels} pixels")
+                                print(f"[*] Đã lấy mẫu nền màu tĩnh (hồng/vàng): {baseline_excl_pixels} pixels")
                             
                             # Tính lượng pixel TĂNG ĐỘT BIẾN so với nền tĩnh
                             diff_pixels = excl_pixels - baseline_excl_pixels
@@ -521,28 +697,90 @@ def main():
 
                 time.sleep(0.02)
 
-            if keyboard.is_pressed('q'):
-                break
-            if restart_flag or keyboard.is_pressed('r'):
+            if keyboard.is_pressed('q'): break
+            if restart_flag == 'e' or keyboard.is_pressed('e'):
+                print("\n[+] Đang mở lại bảng cài đặt...")
+                show_control_panel(overlay.root)
+                print("[+] Đã đóng cài đặt, đang khởi động lại...")
+                last_box, known_rx, known_ry = None, None, None
+                sleep_ui(0.5, overlay)
+                continue
+            if restart_flag == 'r' or keyboard.is_pressed('r'):
                 print("[+] Đang khởi động lại...")
                 last_box, known_rx, known_ry = None, None, None
                 sleep_ui(0.5, overlay)
                 continue
 
             if fish_bited:
-                # ========== STEP 3: CHỜ ANIMATION KÉO CÁ (4 giây) ==========
+                # ========== STEP 3: CHỜ ANIMATION KÉO CÁ ==========
                 print(f"[+] Đang kéo cá... (chờ {HARVEST_WAIT}s)")
-                res = sleep_ui(HARVEST_WAIT, overlay)
+                
+                store_tmpl = None
+                if os.path.exists(STORE_TEMPLATE_FILE):
+                    store_tmpl = cv2.imread(STORE_TEMPLATE_FILE, cv2.IMREAD_GRAYSCALE)
+                
+                res = None
+                if store_tmpl is not None:
+                    print("[*] Đang tìm chữ 'Bảo quản' (tự động nhận diện)...")
+                    # Nếu có nhận diện, cho phép đợi tối đa 15s (đề phòng cá to)
+                    wait_end = time.time() + max(15.0, HARVEST_WAIT)
+                    found_store = False
+                    while time.time() < wait_end:
+                        overlay.update()
+                        if keyboard.is_pressed('q'):
+                            res = 'q'
+                            break
+                        if keyboard.is_pressed('r'):
+                            res = 'r'
+                            break
+                        if keyboard.is_pressed('e'):
+                            res = 'e'
+                            break
+                        
+                        sct_img = sct.grab(sct.monitors[1])
+                        img_gray = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+                        res_match = cv2.matchTemplate(img_gray, store_tmpl, cv2.TM_CCOEFF_NORMED)
+                        _, max_val, _, _ = cv2.minMaxLoc(res_match)
+                        if max_val > 0.8:
+                            found_store = True
+                            print("[+] Đã thấy nút Bảo quản!")
+                            time.sleep(0.5) # Chờ UI hiện ra hoàn toàn
+                            break
+                        
+                        time.sleep(0.1)
+                        wait_end += check_pause(overlay)
+                        
+                else:
+                    res = sleep_ui(HARVEST_WAIT, overlay)
+
+                if res == 'e' or keyboard.is_pressed('e'):
+                    print("\n[+] Đang mở lại bảng cài đặt...")
+                    show_control_panel(overlay.root)
+                    print("[+] Đã đóng cài đặt, đang khởi động lại...")
+                    last_box, known_rx, known_ry = None, None, None
+                    sleep_ui(0.5, overlay)
+                    continue
+
                 if res == 'r' or keyboard.is_pressed('r'):
                     print("[+] Đang khởi động lại...")
                     last_box, known_rx, known_ry = None, None, None
                     sleep_ui(0.5, overlay)
                     continue
 
+                if res == 'q' or keyboard.is_pressed('q'):
+                    break
+
                 # ========== STEP 4: BẢO QUẢN CÁ (X) rồi sẵn sàng câu lại ==========
                 print("[+] Bảo quản cá (X)...")
                 pydirectinput.press('x')
                 res = sleep_ui(STORE_WAIT, overlay)
+                if res == 'e' or keyboard.is_pressed('e'):
+                    print("\n[+] Đang mở lại bảng cài đặt...")
+                    show_control_panel(overlay.root)
+                    print("[+] Đã đóng cài đặt, đang khởi động lại...")
+                    last_box, known_rx, known_ry = None, None, None
+                    sleep_ui(0.5, overlay)
+                    continue
                 if res == 'r' or keyboard.is_pressed('r'):
                     print("[+] Đang khởi động lại...")
                     last_box, known_rx, known_ry = None, None, None
@@ -562,6 +800,13 @@ def main():
                 print("[-] Hết giờ, thu cần lại (F)...")
                 pydirectinput.press('f')
                 res = sleep_ui(1.5, overlay)
+                if res == 'e' or keyboard.is_pressed('e'):
+                    print("\n[+] Đang mở lại bảng cài đặt...")
+                    show_control_panel(overlay.root)
+                    print("[+] Đã đóng cài đặt, đang khởi động lại...")
+                    last_box, known_rx, known_ry = None, None, None
+                    sleep_ui(0.5, overlay)
+                    continue
                 if res == 'r' or keyboard.is_pressed('r'):
                     print("[+] Đang khởi động lại...")
                     last_box, known_rx, known_ry = None, None, None
