@@ -326,7 +326,7 @@ def main():
         import tkinter.messagebox
         tkinter.messagebox.showerror("Loi", f"Khong the doc file {NAMETAG_TEMPLATE_FILE}!")
         return
-    nametag_tmpl_green = cv2.inRange(nametag_tmpl_color, np.array([0, 200, 0]), np.array([50, 255, 50]))
+    nametag_tmpl_green = cv2.inRange(nametag_tmpl_color, np.array([0, 150, 0]), np.array([100, 255, 100]))
     nt_h, nt_w = nametag_tmpl_green.shape
 
     sct = mss.mss()
@@ -441,7 +441,7 @@ def main():
                 sct_img = sct.grab(mon_lock)
                 # Tìm nametag bằng mask xanh lá để chống nhiễu phông nền
                 frame_color = np.array(sct_img)[:, :, :3]
-                frame_green = cv2.inRange(frame_color, np.array([0, 200, 0]), np.array([50, 255, 50]))
+                frame_green = cv2.inRange(frame_color, np.array([0, 150, 0]), np.array([100, 255, 100]))
                 
                 ns, nloc, nscale = find_nametag_center_bias(frame_green, nametag_tmpl_green, NAMETAG_SCALES)
                 if ns >= NAMETAG_THRESHOLD:
@@ -452,7 +452,7 @@ def main():
                     # Trích xuất vùng màu và kiểm tra chữ xanh lá (Green text)
                     nt_roi_color = np.array(sct_img)[ny_rel:ny_rel+nh, nx_rel:nx_rel+nw, :3]
                     # Chữ xanh lá có mã màu xấp xỉ BGR = (0, 255, 0)
-                    green_mask = cv2.inRange(nt_roi_color, np.array([0, 200, 0]), np.array([50, 255, 50]))
+                    green_mask = cv2.inRange(nt_roi_color, np.array([0, 150, 0]), np.array([100, 255, 100]))
                     
                     if cv2.countNonZero(green_mask) > 50:
                         nx_abs = nx_rel + 0
@@ -544,7 +544,7 @@ def main():
 
                 if fixed_scan_box is None:
                     frame_color = np.array(sct_img)[:, :, :3]
-                    frame_green = cv2.inRange(frame_color, np.array([0, 200, 0]), np.array([50, 255, 50]))
+                    frame_green = cv2.inRange(frame_color, np.array([0, 150, 0]), np.array([100, 255, 100]))
                     ns, nloc, nscale = find_nametag_center_bias(frame_green, nametag_tmpl_green, NAMETAG_SCALES)
 
                     if ns >= NAMETAG_THRESHOLD:
@@ -555,7 +555,7 @@ def main():
                         
                         # Kiểm tra chữ màu xanh lá (Green text)
                         nt_roi_color = np.array(sct_img)[ny_rel:ny_rel+nh, nx_rel:nx_rel+nw, :3]
-                        green_mask = cv2.inRange(nt_roi_color, np.array([0, 200, 0]), np.array([50, 255, 50]))
+                        green_mask = cv2.inRange(nt_roi_color, np.array([0, 150, 0]), np.array([100, 255, 100]))
                         
                         green_pixels = cv2.countNonZero(green_mask)
                         # Text nametag mỏng nên số lượng pixel xanh dao động từ 50 đến 3000.
