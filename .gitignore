@@ -1,0 +1,16 @@
+__pycache__/
+venv/
+.env
+*.pyc
+*.pyo
+*.pyd
+
+# Models and Large Files
+*.pth
+*.npz
+
+# Debug images
+debug_*.png
+
+# Dataset
+dataset/
